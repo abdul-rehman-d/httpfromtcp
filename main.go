@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bytes"
 	"fmt"
 	"log"
 	"os"
@@ -14,13 +15,28 @@ func main() {
 		log.Fatal("no messages.txt file")
 	}
 
-	buffer := make([]byte, BUFFER_SIZE, BUFFER_SIZE)
-
+	currentLine := ""
 	for {
+		buffer := make([]byte, BUFFER_SIZE, BUFFER_SIZE)
 		bytesRead, err := f.Read(buffer)
 		if err != nil {
 			break
 		}
-		fmt.Printf("read: %s\n", string(buffer[:bytesRead]))
+
+		buffer = buffer[:bytesRead]
+
+		for {
+			if idx := bytes.IndexByte(buffer, '\n'); idx >= 0 {
+				currentLine += string(buffer[:idx])
+				fmt.Printf("read: %s\n", currentLine)
+
+				buffer = buffer[idx+1:]
+				currentLine = ""
+			} else {
+				break
+			}
+		}
+
+		currentLine += string(buffer)
 	}
 }
