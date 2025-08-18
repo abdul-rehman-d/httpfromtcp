@@ -3,6 +3,7 @@ package main
 import (
 	"bytes"
 	"fmt"
+	"io"
 	"log"
 	"os"
 )
@@ -15,28 +16,44 @@ func main() {
 		log.Fatal("no messages.txt file")
 	}
 
-	currentLine := ""
-	for {
-		buffer := make([]byte, BUFFER_SIZE, BUFFER_SIZE)
-		bytesRead, err := f.Read(buffer)
-		if err != nil {
-			break
-		}
+	lines := getLinesChannel(f)
+	for line := range lines {
+		fmt.Printf("read: %s\n", line)
+	}
 
-		buffer = buffer[:bytesRead]
+}
 
+func getLinesChannel(f io.ReadCloser) <-chan string {
+	out := make(chan string, 1)
+
+	go func() {
+		defer f.Close()
+		defer close(out)
+		currentLine := ""
 		for {
-			if idx := bytes.IndexByte(buffer, '\n'); idx >= 0 {
-				currentLine += string(buffer[:idx])
-				fmt.Printf("read: %s\n", currentLine)
-
-				buffer = buffer[idx+1:]
-				currentLine = ""
-			} else {
+			buffer := make([]byte, BUFFER_SIZE, BUFFER_SIZE)
+			bytesRead, err := f.Read(buffer)
+			if err != nil {
 				break
 			}
-		}
 
-		currentLine += string(buffer)
-	}
+			buffer = buffer[:bytesRead]
+
+			for {
+				if idx := bytes.IndexByte(buffer, '\n'); idx >= 0 {
+					currentLine += string(buffer[:idx])
+					out <- currentLine
+
+					buffer = buffer[idx+1:]
+					currentLine = ""
+				} else {
+					break
+				}
+			}
+
+			currentLine += string(buffer)
+		}
+	}()
+
+	return out
 }
