@@ -1,9 +1,8 @@
 package main
 
 import (
-	"bytes"
 	"fmt"
-	"io"
+	"httpfromtcp/internal/request"
 	"log"
 	"net"
 )
@@ -22,47 +21,16 @@ func main() {
 			log.Fatal("error", "error", err)
 		}
 
-		for line := range getLinesChannel(conn) {
-			fmt.Printf("%s\n", line)
+		req, err := request.RequestFromReader(conn)
+		if err != nil {
+			log.Fatal("error", "error", err)
 		}
+
+		fmt.Printf(
+			"Request line:\n- Method: %s\n- Target: %s\n- Version: %s\n",
+			req.RequestLine.Method,
+			req.RequestLine.RequestTarget,
+			req.RequestLine.HttpVersion,
+		)
 	}
-}
-
-func getLinesChannel(f io.ReadCloser) <-chan string {
-	out := make(chan string, 1)
-
-	go func() {
-		defer f.Close()
-		defer close(out)
-		currentLine := ""
-		for {
-			buffer := make([]byte, BUFFER_SIZE, BUFFER_SIZE)
-			bytesRead, err := f.Read(buffer)
-			if err != nil {
-				break
-			}
-
-			buffer = buffer[:bytesRead]
-
-			for {
-				if idx := bytes.IndexByte(buffer, '\n'); idx >= 0 {
-					currentLine += string(buffer[:idx])
-					out <- currentLine
-
-					buffer = buffer[idx+1:]
-					currentLine = ""
-				} else {
-					break
-				}
-			}
-
-			currentLine += string(buffer)
-		}
-
-		if len(currentLine) > 0 {
-			out <- currentLine
-		}
-	}()
-
-	return out
 }
