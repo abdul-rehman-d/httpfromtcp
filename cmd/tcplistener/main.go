@@ -26,7 +26,6 @@ func main() {
 			fmt.Printf("%s\n", line)
 		}
 	}
-
 }
 
 func getLinesChannel(f io.ReadCloser) <-chan string {
@@ -58,6 +57,10 @@ func getLinesChannel(f io.ReadCloser) <-chan string {
 			}
 
 			currentLine += string(buffer)
+		}
+
+		if len(currentLine) > 0 {
+			out <- currentLine
 		}
 	}()
 
