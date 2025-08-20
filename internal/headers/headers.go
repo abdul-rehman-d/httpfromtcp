@@ -47,13 +47,13 @@ func (h *Headers) Parse(data []byte) (n int, done bool, err error) {
 			break
 		}
 
+		read := (idx + len(SEPERATOR))
+		n += read
+
 		if idx == 0 {
 			done = true
 			break
 		}
-
-		read := (idx + len(SEPERATOR))
-		n += read
 
 		key, value, ok := parseHeader(data[:idx])
 		if !ok {
@@ -62,7 +62,11 @@ func (h *Headers) Parse(data []byte) (n int, done bool, err error) {
 
 		data = data[read:]
 
-		err = h.Set(key, value)
+		prev := h.Get(key)
+		if len(prev) > 0 {
+			prev += ", "
+		}
+		err = h.Set(key, prev+value)
 		if err != nil {
 			return 0, false, err
 		}
