@@ -51,6 +51,7 @@ type Request struct {
 func newRequest() *Request {
 	return &Request{
 		state: StateInit,
+		Body:  []byte{},
 	}
 }
 
@@ -92,14 +93,19 @@ outer:
 				if err != nil {
 					return 0, fmt.Errorf("invalid content-length")
 				}
-				r.Body = make([]byte, len(currentData))
-				copy(r.Body, currentData)
-				if len(r.Body) > x {
+
+				if len(currentData) > x {
 					return 0, fmt.Errorf("invalid body")
 				}
+
+				r.Body = append(r.Body, currentData...)
+
+				read += len(currentData)
+
 				if len(r.Body) == x {
 					r.state = StateDone
 				}
+
 				break outer
 			} else {
 				r.state = StateDone
