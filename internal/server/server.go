@@ -2,6 +2,7 @@ package server
 
 import (
 	"fmt"
+	"httpfromtcp/internal/response"
 	"log/slog"
 	"net"
 )
@@ -35,14 +36,13 @@ func (s *Server) listen() {
 }
 
 func (s *Server) handle(conn net.Conn) {
-	dataToWrite := []byte("HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\n\r\nHello World!")
-
-	n, err := conn.Write(dataToWrite)
-	if n != len(dataToWrite) {
-		slog.Error("error failed to write data")
-	}
+	err := response.WriteStatusLine(conn, response.OK)
 	if err != nil {
-		slog.Error("error", "failed to write data", err)
+		slog.Error("error", "failed to write response status line", err)
+	}
+	err = response.WriteHeaders(conn, response.GetDefaultHeaders(0))
+	if err != nil {
+		slog.Error("error", "failed to write response headers", err)
 	}
 
 	conn.Close()
