@@ -25,14 +25,12 @@ func (h *Headers) Get(key string) string {
 	return h.headers[strings.ToLower(key)]
 }
 
-func (h *Headers) Set(key string, value string) error {
+func (h *Headers) Set(key string, value string) {
 	key = strings.ToLower(key)
-	if !isValidToken([]byte(key)) {
-		return fmt.Errorf("invalid header %s", key)
-
+	if v, ok := h.headers[key]; ok {
+		value = fmt.Sprintf("%s, %s", v, value)
 	}
-	h.headers[strings.ToLower(key)] = value
-	return nil
+	h.headers[key] = value
 }
 
 func (h *Headers) Parse(data []byte) (n int, done bool, err error) {
@@ -62,14 +60,12 @@ func (h *Headers) Parse(data []byte) (n int, done bool, err error) {
 
 		data = data[read:]
 
-		prev := h.Get(key)
-		if len(prev) > 0 {
-			prev += ", "
+		if !isValidToken([]byte(key)) {
+			return 0, false, fmt.Errorf("invalid header %s", key)
+
 		}
-		err = h.Set(key, prev+value)
-		if err != nil {
-			return 0, false, err
-		}
+
+		h.Set(key, value)
 	}
 
 	return n, done, nil
