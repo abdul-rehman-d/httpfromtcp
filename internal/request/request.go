@@ -69,7 +69,6 @@ outer:
 			r.state = StateParseHeaders
 		case StateParseHeaders:
 			headers := headers.NewHeaders()
-			fmt.Println(string(data[read:]))
 			n, done, err := headers.Parse(data[read:])
 			if err != nil {
 				return 0, err

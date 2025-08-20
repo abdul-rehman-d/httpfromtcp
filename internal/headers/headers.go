@@ -3,6 +3,7 @@ package headers
 import (
 	"bytes"
 	"fmt"
+	"iter"
 	"strings"
 )
 
@@ -31,6 +32,16 @@ func (h *Headers) Set(key string, value string) {
 		value = fmt.Sprintf("%s, %s", v, value)
 	}
 	h.headers[key] = value
+}
+
+func (h *Headers) Range() iter.Seq[string] {
+	return func(yield func(string) bool) {
+		for k := range h.headers {
+			if !yield(k) {
+				return
+			}
+		}
+	}
 }
 
 func (h *Headers) Parse(data []byte) (n int, done bool, err error) {
