@@ -3,6 +3,7 @@ package request
 import (
 	"bytes"
 	"fmt"
+	"httpfromtcp/internal/headers"
 	"io"
 	"strings"
 )
@@ -16,8 +17,9 @@ var SP = []byte(" ")
 type parserState string
 
 const (
-	StateInit parserState = "init"
-	StateDone parserState = "done"
+	StateInit         parserState = "init"
+	StateDone         parserState = "done"
+	StateParseHeaders parserState = "headers"
 )
 
 type RequestLine struct {
@@ -39,6 +41,7 @@ func (req *RequestLine) parseHttpVersion() (string, bool) {
 
 type Request struct {
 	RequestLine RequestLine
+	Headers     *headers.Headers
 	state       parserState
 }
 
@@ -63,6 +66,22 @@ outer:
 			}
 			read += n
 			r.RequestLine = *rl
+			r.state = StateParseHeaders
+		case StateParseHeaders:
+			headers := headers.NewHeaders()
+			fmt.Println(string(data[read:]))
+			n, done, err := headers.Parse(data[read:])
+			if err != nil {
+				return 0, err
+			}
+			if n == 0 {
+				break outer
+			}
+			if !done {
+				break outer
+			}
+			read += n
+			r.Headers = headers
 			r.state = StateDone
 		case StateDone:
 			break outer
