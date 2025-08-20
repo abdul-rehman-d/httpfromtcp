@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"httpfromtcp/internal/headers"
 	"io"
+	"strconv"
 	"strings"
 )
 
@@ -20,6 +21,7 @@ const (
 	StateInit         parserState = "init"
 	StateDone         parserState = "done"
 	StateParseHeaders parserState = "headers"
+	StateBody         parserState = "body"
 )
 
 type RequestLine struct {
@@ -42,6 +44,7 @@ func (req *RequestLine) parseHttpVersion() (string, bool) {
 type Request struct {
 	RequestLine RequestLine
 	Headers     *headers.Headers
+	Body        []byte
 	state       parserState
 }
 
@@ -55,9 +58,10 @@ func (r *Request) parse(data []byte) (int, error) {
 	read := 0
 outer:
 	for {
+		currentData := data[read:]
 		switch r.state {
 		case StateInit:
-			rl, n, err := parseRequestLine(data[read:])
+			rl, n, err := parseRequestLine(currentData)
 			if err != nil {
 				return 0, err
 			}
@@ -69,7 +73,7 @@ outer:
 			r.state = StateParseHeaders
 		case StateParseHeaders:
 			headers := headers.NewHeaders()
-			n, done, err := headers.Parse(data[read:])
+			n, done, err := headers.Parse(currentData)
 			if err != nil {
 				return 0, err
 			}
@@ -81,7 +85,26 @@ outer:
 			}
 			read += n
 			r.Headers = headers
-			r.state = StateDone
+			r.state = StateBody
+		case StateBody:
+			if cl := r.Headers.Get("content-length"); len(cl) > 0 {
+				x, err := strconv.Atoi(cl)
+				if err != nil {
+					return 0, fmt.Errorf("invalid content-length")
+				}
+				r.Body = make([]byte, len(currentData))
+				copy(r.Body, currentData)
+				if len(r.Body) > x {
+					return 0, fmt.Errorf("invalid body")
+				}
+				if len(r.Body) == x {
+					r.state = StateDone
+				}
+				break outer
+			} else {
+				r.state = StateDone
+			}
+
 		case StateDone:
 			break outer
 		}
