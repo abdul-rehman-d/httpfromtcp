@@ -14,13 +14,31 @@ func TestHeadersParse(t *testing.T) {
 	n, done, err := headers.Parse(data)
 	require.NoError(t, err)
 	require.NotNil(t, headers)
-	assert.Equal(t, "localhost:42069", headers["Host"])
+	assert.Equal(t, "localhost:42069", headers.Get("Host"))
 	assert.Equal(t, 23, n)
 	assert.True(t, done)
 
 	// Test: Invalid spacing header
 	headers = NewHeaders()
 	data = []byte("       Host : localhost:42069       \r\n\r\n")
+	n, done, err = headers.Parse(data)
+	require.Error(t, err)
+	assert.Equal(t, 0, n)
+	assert.False(t, done)
+
+	// Test: Get by differnt case
+	headers = NewHeaders()
+	data = []byte("Host: localhost:42069\r\n\r\n")
+	n, done, err = headers.Parse(data)
+	require.NoError(t, err)
+	require.NotNil(t, headers)
+	assert.Equal(t, "localhost:42069", headers.Get("HOST"))
+	assert.Equal(t, 23, n)
+	assert.True(t, done)
+
+	// Test: Invalid Header
+	headers = NewHeaders()
+	data = []byte("H@\\t: localhost:42069\r\n\r\n")
 	n, done, err = headers.Parse(data)
 	require.Error(t, err)
 	assert.Equal(t, 0, n)

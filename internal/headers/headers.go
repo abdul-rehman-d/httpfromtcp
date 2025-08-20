@@ -11,13 +11,31 @@ var SEPERATOR = []byte("\r\n")
 var COLON = byte(':')
 var SP = " "
 
-type Headers map[string]string
-
-func NewHeaders() Headers {
-	return make(Headers)
+type Headers struct {
+	headers map[string]string
 }
 
-func (h Headers) Parse(data []byte) (n int, done bool, err error) {
+func NewHeaders() *Headers {
+	return &Headers{
+		headers: map[string]string{},
+	}
+}
+
+func (h *Headers) Get(key string) string {
+	return h.headers[strings.ToLower(key)]
+}
+
+func (h *Headers) Set(key string, value string) error {
+	key = strings.ToLower(key)
+	if !isValidToken([]byte(key)) {
+		return fmt.Errorf("invalid header %s", key)
+
+	}
+	h.headers[strings.ToLower(key)] = value
+	return nil
+}
+
+func (h *Headers) Parse(data []byte) (n int, done bool, err error) {
 	n = 0
 	done = false
 
@@ -44,7 +62,10 @@ func (h Headers) Parse(data []byte) (n int, done bool, err error) {
 
 		data = data[read:]
 
-		h[key] = value
+		err = h.Set(key, value)
+		if err != nil {
+			return 0, false, err
+		}
 	}
 
 	return n, done, nil
@@ -66,4 +87,23 @@ func parseHeader(data []byte) (key string, value string, ok bool) {
 	value = strings.Trim(value, SP)
 
 	return key, value, true
+}
+
+func isValidToken(str []byte) bool {
+	for _, ch := range str {
+		found := false
+		if (ch >= 'A' && ch <= 'Z') || (ch >= 'a' && ch <= 'z') || (ch >= '0' && ch <= '9') {
+			found = true
+		} else {
+			switch ch {
+			case '!', '#', '$', '%', '&', '\'', '*', '+', '-', '.', '^', '_', '`', '|', '~':
+				found = true
+			}
+		}
+
+		if !found {
+			return false
+		}
+	}
+	return true
 }
