@@ -1,11 +1,9 @@
 package server
 
 import (
-	"bytes"
 	"fmt"
 	"httpfromtcp/internal/request"
 	"httpfromtcp/internal/response"
-	"io"
 	"log/slog"
 	"net"
 )
@@ -15,7 +13,7 @@ type HandlerError struct {
 	Message    string
 }
 
-type Handler func(w io.Writer, req *request.Request) *HandlerError
+type Handler func(w *response.Writer, req *request.Request)
 
 type Server struct {
 	closed   bool
@@ -47,41 +45,17 @@ func (s *Server) listen() {
 }
 
 func (s *Server) handle(conn net.Conn) {
+	defer conn.Close()
+
+	writer := response.NewResponseWriter(conn)
 	req, err := request.RequestFromReader(conn)
 	if err != nil {
-		// TOOD
-		conn.Close()
+		writer.WriteStatusLine(response.BadRequest)
+		writer.WriteHeaders(response.GetDefaultHeaders(0))
 		return
 	}
 
-	statusCode := response.OK
-	writer := bytes.NewBuffer([]byte{})
-
-	handlerErr := s.handler(writer, req)
-
-	if handlerErr != nil {
-		writer.Reset()
-		writer.WriteString(handlerErr.Message)
-		statusCode = handlerErr.StatusCode
-	}
-
-	err = response.WriteStatusLine(conn, statusCode)
-
-	if err != nil {
-		slog.Error("error", "failed to write response status line", err)
-		conn.Close()
-		return
-	}
-
-	err = response.WriteHeaders(conn, response.GetDefaultHeaders(writer.Len()))
-
-	if err != nil {
-		slog.Error("error", "failed to write response headers", err)
-	}
-
-	conn.Write(writer.Bytes())
-
-	conn.Close()
+	s.handler(writer, req)
 }
 
 func Serve(port int, handler Handler) (*Server, error) {
