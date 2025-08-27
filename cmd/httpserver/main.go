@@ -5,9 +5,12 @@ import (
 	"httpfromtcp/internal/request"
 	"httpfromtcp/internal/response"
 	"httpfromtcp/internal/server"
+	"io"
 	"log/slog"
+	"net/http"
 	"os"
 	"os/signal"
+	"strings"
 	"syscall"
 )
 
@@ -47,7 +50,59 @@ const (
 )
 
 func main() {
+	proxyHandlers := map[string]server.Handler{
+		"/httpbin": func(w *response.Writer, req *request.Request) {
+			headers := response.GetDefaultHeaders(0)
+			headers.Replace("Content-Type", "text/html")
+			headers.Delete("Content-Length")
+			headers.Set("Transfer-Encoding", "chunked")
+
+			err := w.WriteStatusLine(response.OK)
+			if err != nil {
+				slog.Error("error", "error", err)
+			}
+			err = w.WriteHeaders(headers)
+			if err != nil {
+				slog.Error("error", "error", err)
+			}
+
+			baseUrl := "https://httpbin.org"
+			endpoint := strings.TrimPrefix(req.RequestLine.RequestTarget, "/httpbin")
+			fullUrl := fmt.Sprintf("%s%s", baseUrl, endpoint)
+			res, err := http.Get(fullUrl)
+
+			for {
+				buff := make([]byte, 1024)
+				n, err := res.Body.Read(buff)
+				if n == 0 || err == io.EOF {
+					break
+				}
+				if err != nil {
+					slog.Error("error", "error", err)
+					break
+				}
+				n, err = w.WriteChunkedBody(buff[:n])
+				if err != nil {
+					slog.Error("error", "error", err)
+					break
+				}
+				slog.Info("wrote bytes", "n", n)
+
+			}
+			_, err = w.WriteChunkedBodyDone()
+			if err != nil {
+				slog.Error("error", "error", err)
+			}
+
+		},
+	}
 	server, err := server.Serve(port, func(w *response.Writer, req *request.Request) {
+		for prefix, handler := range proxyHandlers {
+			if strings.HasPrefix(req.RequestLine.RequestTarget, prefix) {
+				handler(w, req)
+				return
+			}
+		}
 		statusCode := response.OK
 		body := ""
 		switch req.RequestLine.RequestTarget {

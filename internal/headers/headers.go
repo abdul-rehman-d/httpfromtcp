@@ -39,6 +39,11 @@ func (h *Headers) Replace(key string, value string) {
 	h.headers[key] = value
 }
 
+func (h *Headers) Delete(key string) {
+	key = strings.ToLower(key)
+	delete(h.headers, key)
+}
+
 func (h *Headers) Range() iter.Seq[string] {
 	return func(yield func(string) bool) {
 		for k := range h.headers {
