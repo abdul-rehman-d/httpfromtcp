@@ -62,21 +62,29 @@ func main() {
 				return
 			}
 		}
-		statusCode := response.OK
-		body := ""
-		switch req.RequestLine.RequestTarget {
-		case "/yourproblem":
-			statusCode = response.BadRequest
-			body = BAD_REQUEST
-		case "/myproblem":
-			statusCode = response.InternalServerError
-			body = INTERNAL_SERVER_ERROR
-		default:
-			body = OK
-		}
+
+		slog.Info("got a request", "req", req)
 
 		headers := response.GetDefaultHeaders(0)
 		headers.Replace("Content-Type", "text/html")
+
+		statusCode := response.OK
+		body := []byte{}
+		switch req.RequestLine.RequestTarget {
+		case "/video":
+			body, _ = os.ReadFile("assets/vim.mp4")
+			headers.Replace("Content-Type", "video/mp4")
+			headers.Replace("connection", "keep-alive")
+		case "/yourproblem":
+			statusCode = response.BadRequest
+			body = []byte(BAD_REQUEST)
+		case "/myproblem":
+			statusCode = response.InternalServerError
+			body = []byte(INTERNAL_SERVER_ERROR)
+		default:
+			body = []byte(OK)
+		}
+
 		headers.Replace("Content-Length", fmt.Sprintf("%d", len(body)))
 
 		err := w.WriteStatusLine(statusCode)
@@ -87,7 +95,7 @@ func main() {
 		if err != nil {
 			slog.Error("error", "error", err)
 		}
-		_, err = w.WriteBody([]byte(body))
+		_, err = w.WriteBody(body)
 		if err != nil {
 			slog.Error("error", "error", err)
 		}
