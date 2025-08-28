@@ -1,7 +1,9 @@
 package main
 
 import (
+	"crypto/sha256"
 	"fmt"
+	"httpfromtcp/internal/headers"
 	"httpfromtcp/internal/request"
 	"httpfromtcp/internal/response"
 	"httpfromtcp/internal/server"
@@ -51,50 +53,7 @@ const (
 
 func main() {
 	proxyHandlers := map[string]server.Handler{
-		"/httpbin": func(w *response.Writer, req *request.Request) {
-			headers := response.GetDefaultHeaders(0)
-			headers.Replace("Content-Type", "text/html")
-			headers.Delete("Content-Length")
-			headers.Set("Transfer-Encoding", "chunked")
-
-			err := w.WriteStatusLine(response.OK)
-			if err != nil {
-				slog.Error("error", "error", err)
-			}
-			err = w.WriteHeaders(headers)
-			if err != nil {
-				slog.Error("error", "error", err)
-			}
-
-			baseUrl := "https://httpbin.org"
-			endpoint := strings.TrimPrefix(req.RequestLine.RequestTarget, "/httpbin")
-			fullUrl := fmt.Sprintf("%s%s", baseUrl, endpoint)
-			res, err := http.Get(fullUrl)
-
-			for {
-				buff := make([]byte, 1024)
-				n, err := res.Body.Read(buff)
-				if n == 0 || err == io.EOF {
-					break
-				}
-				if err != nil {
-					slog.Error("error", "error", err)
-					break
-				}
-				n, err = w.WriteChunkedBody(buff[:n])
-				if err != nil {
-					slog.Error("error", "error", err)
-					break
-				}
-				slog.Info("wrote bytes", "n", n)
-
-			}
-			_, err = w.WriteChunkedBodyDone()
-			if err != nil {
-				slog.Error("error", "error", err)
-			}
-
-		},
+		"/httpbin": httpbinHandler,
 	}
 	server, err := server.Serve(port, func(w *response.Writer, req *request.Request) {
 		for prefix, handler := range proxyHandlers {
@@ -144,4 +103,75 @@ func main() {
 	signal.Notify(sigChan, syscall.SIGINT, syscall.SIGTERM)
 	<-sigChan
 	slog.Info("\nserver stopped gracefully")
+}
+
+func httpbinHandler(w *response.Writer, req *request.Request) {
+	h := response.GetDefaultHeaders(0)
+	h.Replace("Content-Type", "text/html")
+	h.Delete("Content-Length")
+	h.Set("Transfer-Encoding", "chunked")
+	h.Set("Trailer", "X-Content-SHA256")
+	h.Set("Trailer", "X-Content-Length")
+
+	err := w.WriteStatusLine(response.OK)
+	if err != nil {
+		slog.Error("error", "error", err)
+	}
+	err = w.WriteHeaders(h)
+	if err != nil {
+		slog.Error("error", "error", err)
+	}
+
+	baseUrl := "https://httpbin.org"
+	endpoint := strings.TrimPrefix(req.RequestLine.RequestTarget, "/httpbin")
+	fullUrl := fmt.Sprintf("%s%s", baseUrl, endpoint)
+	res, err := http.Get(fullUrl)
+
+	body := []byte{}
+
+	for {
+		buff := make([]byte, 32)
+		n, err := res.Body.Read(buff)
+		if n == 0 || err == io.EOF {
+			break
+		}
+		if err != nil {
+			slog.Error("error", "error", err)
+			break
+		}
+
+		body = append(body, buff[:n]...)
+
+		n, err = w.WriteChunkedBody(buff[:n])
+		if err != nil {
+			slog.Error("error", "error", err)
+			break
+		}
+		slog.Info("wrote bytes", "n", n)
+
+	}
+	_, err = w.WriteChunkedBodyDone()
+	if err != nil {
+		slog.Error("error", "error", err)
+	}
+
+	trailers := headers.NewHeaders()
+
+	hash := sha256.Sum256(body)
+	trailers.Set("X-Content-SHA256", toStr(hash))
+	trailers.Set("X-Content-Length", fmt.Sprintf("%d", len(body)))
+
+	err = w.WriteTrailers(*trailers)
+	if err != nil {
+		slog.Error("error", "error", err)
+	}
+
+}
+
+func toStr(hash [32]byte) string {
+	out := ""
+	for _, b := range hash {
+		out += fmt.Sprintf("%02x", b)
+	}
+	return out
 }

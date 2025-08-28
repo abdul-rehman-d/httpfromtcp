@@ -17,10 +17,11 @@ const (
 type WriterState = string
 
 const (
-	InitState   WriterState = "init"
-	HeaderState WriterState = "headers"
-	BodyState   WriterState = "body"
-	DoneState   WriterState = "done"
+	InitState     WriterState = "init"
+	HeaderState   WriterState = "headers"
+	BodyState     WriterState = "body"
+	TrailersState WriterState = "trailers"
+	DoneState     WriterState = "done"
 )
 
 type Writer struct {
@@ -63,6 +64,26 @@ func (w *Writer) WriteHeaders(headers headers.Headers) error {
 	return nil
 }
 
+func (w *Writer) WriteTrailers(headers headers.Headers) error {
+	if w.writerState != TrailersState {
+		return fmt.Errorf("not in correct state")
+	}
+	for k := range headers.Range() {
+		v := headers.Get(k)
+
+		str := fmt.Sprintf("%s: %s\r\n", k, v)
+		if err := w.writeStringAndHandleErrs(str, HeaderState); err != nil {
+			return err
+		}
+	}
+	// END OF TRAILERS: EMPTY HEADER
+	if err := w.writeStringAndHandleErrs("\r\n", DoneState); err != nil {
+		return err
+	}
+
+	return nil
+}
+
 func (w *Writer) WriteBody(p []byte) (int, error) {
 	if w.writerState != BodyState {
 		return 0, fmt.Errorf("not in correct state")
@@ -90,9 +111,9 @@ func (w *Writer) WriteChunkedBodyDone() (int, error) {
 	if w.writerState != BodyState {
 		return 0, fmt.Errorf("not in correct state")
 	}
-	n, err := w.writer.Write([]byte("0\r\n\r\n"))
-	if err == nil && n == 5 {
-		w.writerState = DoneState
+	n, err := w.writer.Write([]byte("0\r\n"))
+	if err == nil && n == 3 {
+		w.writerState = TrailersState
 	}
 	return n, err
 }
